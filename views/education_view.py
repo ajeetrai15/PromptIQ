@@ -71,14 +71,18 @@ def render_education_view():
             # Direct action to test in PromptIQ
             col_act1, col_act2 = st.columns(2)
             with col_act1:
-                if st.button(f"🔬 Analyze Engineered Prompt", key=f"edu_an_{topic['id']}"):
-                    load_prompt_into(topic["good_example"], "🔬 Prompt Analyzer")
-                    st.rerun()
+                st.button(
+                    f"🔬 Analyze Engineered Prompt",
+                    key=f"edu_an_{topic['id']}",
+                    on_click=load_prompt_into,
+                    args=(topic["good_example"], "🔬 Prompt Analyzer"),
+                    use_container_width=True,
+                )
             with col_act2:
-                if st.button(f"⚖️ Compare Weak vs. Engineered in Lab", key=f"edu_cmp_{topic['id']}"):
-                    load_prompt_into(
-                        prompt_text=topic["poor_example"],
-                        target_page="⚖️ Comparison Lab",
-                        optimized_text=topic["good_example"],
-                    )
-                    st.rerun()
+                st.button(
+                    f"⚖️ Compare Weak vs. Engineered in Lab",
+                    key=f"edu_cmp_{topic['id']}",
+                    on_click=load_prompt_into,
+                    args=(topic["poor_example"], "⚖️ Comparison Lab", topic["good_example"]),
+                    use_container_width=True,
+                )

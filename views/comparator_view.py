@@ -23,7 +23,6 @@ def render_comparator_view():
             height=160,
             placeholder="Enter baseline prompt...",
             label_visibility="collapsed",
-            key="comp_orig_input",
         )
 
     with col_p2:
@@ -34,7 +33,6 @@ def render_comparator_view():
             height=160,
             placeholder="Enter optimized prompt or click 'Auto-Generate' below...",
             label_visibility="collapsed",
-            key="comp_opt_input",
         )
 
     # Action Toolbar

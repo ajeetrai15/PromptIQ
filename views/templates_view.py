@@ -53,16 +53,28 @@ def render_templates_view():
 
             c1, c2, c3 = st.columns(3)
             with c1:
-                if st.button("🔬 Analyze Prompt", key=f"tpl_an_{t['id']}", use_container_width=True):
-                    load_prompt_into(t["prompt"], "🔬 Prompt Analyzer")
-                    st.rerun()
+                st.button(
+                    "🔬 Analyze Prompt",
+                    key=f"tpl_an_{t['id']}",
+                    on_click=load_prompt_into,
+                    args=(t["prompt"], "🔬 Prompt Analyzer"),
+                    use_container_width=True,
+                )
             with c2:
-                if st.button("✨ Optimize Prompt", key=f"tpl_opt_{t['id']}", use_container_width=True):
-                    load_prompt_into(t["prompt"], "✨ Prompt Optimizer")
-                    st.rerun()
+                st.button(
+                    "✨ Optimize Prompt",
+                    key=f"tpl_opt_{t['id']}",
+                    on_click=load_prompt_into,
+                    args=(t["prompt"], "✨ Prompt Optimizer"),
+                    use_container_width=True,
+                )
             with c3:
-                if st.button("⚖️ Compare in Lab", key=f"tpl_cmp_{t['id']}", use_container_width=True):
-                    load_prompt_into(t["prompt"], "⚖️ Comparison Lab")
-                    st.rerun()
+                st.button(
+                    "⚖️ Compare in Lab",
+                    key=f"tpl_cmp_{t['id']}",
+                    on_click=load_prompt_into,
+                    args=(t["prompt"], "⚖️ Comparison Lab"),
+                    use_container_width=True,
+                )
             
             st.markdown("<div style='margin-bottom: 1rem;'></div>", unsafe_allow_html=True)

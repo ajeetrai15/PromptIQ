@@ -142,13 +142,15 @@ def render_optimizer_view():
         # Bridge Action to Comparison Lab
         st.markdown("---")
         st.markdown("##### 🔬 Ready to test this in practice?")
-        if st.button("⚖️ Run Both Prompts in Comparison Lab", type="primary", use_container_width=True):
-            load_prompt_into(
-                prompt_text=user_prompt,
-                target_page="⚖️ Comparison Lab",
-                optimized_text=opt_res.improved_prompt,
-            )
-            st.rerun()
+        st.button(
+            "⚖️ Run Both Prompts in Comparison Lab",
+            key="btn_opt_to_comparison_lab",
+            on_click=load_prompt_into,
+            args=(user_prompt, "⚖️ Comparison Lab", opt_res.improved_prompt),
+            type="primary",
+            use_container_width=True,
+            help="Transfer both original and optimized prompts into the Comparison Lab.",
+        )
 
     else:
         render_empty_state(

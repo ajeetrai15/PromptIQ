@@ -135,13 +135,23 @@ def render_analyzer_view():
         st.markdown("##### 🚀 Next Step: Upgrade Your Prompt")
         col_opt, col_lab = st.columns(2)
         with col_opt:
-            if st.button("✨ Send to Prompt Optimizer", use_container_width=True):
-                load_prompt_into(user_prompt, "✨ Prompt Optimizer")
-                st.rerun()
+            st.button(
+                "✨ Upgrade Your Prompt",
+                key="btn_upgrade_prompt_optimizer",
+                on_click=load_prompt_into,
+                args=(user_prompt, "✨ Prompt Optimizer"),
+                use_container_width=True,
+                help="Transfer this analyzed prompt to the Prompt Optimizer for architectural enhancement.",
+            )
         with col_lab:
-            if st.button("⚖️ Test in Comparison Lab", use_container_width=True):
-                load_prompt_into(user_prompt, "⚖️ Comparison Lab")
-                st.rerun()
+            st.button(
+                "⚖️ Test in Comparison Lab",
+                key="btn_test_comparison_lab",
+                on_click=load_prompt_into,
+                args=(user_prompt, "⚖️ Comparison Lab"),
+                use_container_width=True,
+                help="Transfer this prompt into the Comparison Lab to run dual inference.",
+            )
     else:
         render_empty_state(
             title="No Prompt Analyzed Yet",

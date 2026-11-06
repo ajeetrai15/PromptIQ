@@ -35,6 +35,9 @@ def init_session_state() -> None:
     if "navigation_page" not in st.session_state:
         st.session_state.navigation_page = "🔬 Prompt Analyzer"
 
+    if "target_nav_page" not in st.session_state:
+        st.session_state.target_nav_page = None
+
 
 def add_to_history(
     prompt: str,
@@ -71,9 +74,28 @@ def clear_history() -> None:
 
 
 def load_prompt_into(prompt_text: str, target_page: str, optimized_text: str = "") -> None:
-    """Helper to navigate to a target page with a prefilled prompt."""
+    """Helper to navigate to a target page with a prefilled prompt.
+    
+    Sets the target prompt and deferred navigation target without directly mutating
+    instantiated widget keys during the active render pass.
+    """
     st.session_state.current_prompt = prompt_text
     if optimized_text:
         st.session_state.optimized_prompt = optimized_text
     st.session_state.navigation_page = target_page
-    st.session_state.nav_radio = target_page
+    st.session_state.target_nav_page = target_page
+
+
+def sync_navigation(valid_pages: Optional[List[str]] = None) -> str:
+    """Safely synchronize pending navigation before the navigation widget is instantiated."""
+    target = st.session_state.get("target_nav_page")
+    if target:
+        if valid_pages is None or target in valid_pages:
+            st.session_state.navigation_page = target
+            st.session_state.nav_radio = target
+        st.session_state.target_nav_page = None
+
+    if "nav_radio" not in st.session_state or (valid_pages and st.session_state.nav_radio not in valid_pages):
+        st.session_state.nav_radio = st.session_state.navigation_page
+
+    return st.session_state.navigation_page

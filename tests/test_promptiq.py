@@ -140,7 +140,7 @@ class TestPromptIQ(unittest.TestCase):
     def test_history_and_state_management(self):
         """Verify session state history addition, limits, and clearing."""
         import streamlit as st
-        from utils.state import init_session_state, add_to_history, clear_history, load_prompt_into
+        from utils.state import init_session_state, add_to_history, clear_history, load_prompt_into, sync_navigation
 
         init_session_state()
         self.assertEqual(len(st.session_state.history), 0)
@@ -160,11 +160,56 @@ class TestPromptIQ(unittest.TestCase):
         self.assertEqual(st.session_state.current_prompt, "Target Prompt")
         self.assertEqual(st.session_state.optimized_prompt, "Target Opt")
         self.assertEqual(st.session_state.navigation_page, "✨ Prompt Optimizer")
+        self.assertEqual(st.session_state.target_nav_page, "✨ Prompt Optimizer")
+
+        # Synchronize navigation before widget instantiation
+        sync_navigation()
         self.assertEqual(st.session_state.nav_radio, "✨ Prompt Optimizer")
+        self.assertIsNone(st.session_state.target_nav_page)
 
         # Clear history
         clear_history()
         self.assertEqual(len(st.session_state.history), 0)
+
+    def test_navigation_widget_decoupling_regression(self):
+        """Regression test ensuring load_prompt_into does not modify widget-instantiated keys directly."""
+        import streamlit as st
+        from utils.state import init_session_state, load_prompt_into, sync_navigation
+
+        init_session_state()
+
+        # Simulate existing instantiated widget state
+        st.session_state.nav_radio = "🔬 Prompt Analyzer"
+        st.session_state.navigation_page = "🔬 Prompt Analyzer"
+
+        # Action: User on analyzer page clicks "Upgrade Your Prompt"
+        analyzed_prompt = "Write a Python script to scrape products."
+        load_prompt_into(analyzed_prompt, "✨ Prompt Optimizer")
+
+        # Verify: current_prompt is immediately transferred for the optimizer view
+        self.assertEqual(st.session_state.current_prompt, analyzed_prompt)
+        self.assertEqual(st.session_state.navigation_page, "✨ Prompt Optimizer")
+        self.assertEqual(st.session_state.target_nav_page, "✨ Prompt Optimizer")
+
+        # Verify: nav_radio was NOT mutated during load_prompt_into (prevents StreamlitWidgetAlreadyInstantiatedError)
+        self.assertEqual(st.session_state.nav_radio, "🔬 Prompt Analyzer")
+
+        # Next run pass: app.py runs sync_navigation before st.radio instantiation
+        nav_options = [
+            "🔬 Prompt Analyzer",
+            "✨ Prompt Optimizer",
+            "⚖️ Comparison Lab",
+            "📚 Prompt Templates",
+            "🎓 Educational Academy",
+            "🕒 History & Vault",
+        ]
+        active_page = sync_navigation(nav_options)
+
+        # After safe pre-widget sync:
+        self.assertEqual(active_page, "✨ Prompt Optimizer")
+        self.assertEqual(st.session_state.nav_radio, "✨ Prompt Optimizer")
+        self.assertEqual(st.session_state.navigation_page, "✨ Prompt Optimizer")
+        self.assertIsNone(st.session_state.target_nav_page)
 
 
 if __name__ == "__main__":

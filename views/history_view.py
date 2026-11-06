@@ -54,18 +54,30 @@ def render_history_view():
 
             col1, col2, col3 = st.columns(3)
             with col1:
-                if st.button(f"🔬 Analyze Again", key=f"hist_an_{item['id']}", use_container_width=True):
-                    load_prompt_into(prompt, "🔬 Prompt Analyzer")
-                    st.rerun()
+                st.button(
+                    f"🔬 Analyze Again",
+                    key=f"hist_an_{item['id']}",
+                    on_click=load_prompt_into,
+                    args=(prompt, "🔬 Prompt Analyzer"),
+                    use_container_width=True,
+                )
             with col2:
-                if st.button(f"✨ Optimize", key=f"hist_opt_{item['id']}", use_container_width=True):
-                    opt_val = details.get("improved_prompt", "")
-                    load_prompt_into(prompt, "✨ Prompt Optimizer", optimized_text=opt_val)
-                    st.rerun()
+                opt_val = details.get("improved_prompt", "")
+                st.button(
+                    f"✨ Optimize",
+                    key=f"hist_opt_{item['id']}",
+                    on_click=load_prompt_into,
+                    args=(prompt, "✨ Prompt Optimizer", opt_val),
+                    use_container_width=True,
+                )
             with col3:
-                if st.button(f"⚖️ Compare in Lab", key=f"hist_cmp_{item['id']}", use_container_width=True):
-                    opt_val = details.get("improved_prompt", "")
-                    load_prompt_into(prompt, "⚖️ Comparison Lab", optimized_text=opt_val)
-                    st.rerun()
+                opt_val = details.get("improved_prompt", "")
+                st.button(
+                    f"⚖️ Compare in Lab",
+                    key=f"hist_cmp_{item['id']}",
+                    on_click=load_prompt_into,
+                    args=(prompt, "⚖️ Comparison Lab", opt_val),
+                    use_container_width=True,
+                )
 
             st.markdown("<div style='margin-bottom: 0.75rem;'></div>", unsafe_allow_html=True)

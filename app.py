@@ -13,7 +13,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-from utils.state import init_session_state
+from utils.state import init_session_state, sync_navigation
 from utils.ui_helpers import inject_custom_styles
 from core.gemini_service import get_configured_api_key
 from views.analyzer_view import render_analyzer_view
@@ -116,8 +116,11 @@ def main():
             "🕒 History & Vault",
         ]
 
-        if "nav_radio" not in st.session_state or st.session_state.nav_radio not in nav_options:
-            st.session_state.nav_radio = st.session_state.navigation_page
+        # Safely resolve any pending programmatic navigation before widget instantiation
+        sync_navigation(nav_options)
+
+        def on_nav_change():
+            st.session_state.navigation_page = st.session_state.nav_radio
 
         current_index = nav_options.index(st.session_state.nav_radio) if st.session_state.nav_radio in nav_options else 0
 
@@ -126,6 +129,7 @@ def main():
             nav_options,
             index=current_index,
             key="nav_radio",
+            on_change=on_nav_change,
             label_visibility="collapsed",
         )
         st.session_state.navigation_page = selected_page
