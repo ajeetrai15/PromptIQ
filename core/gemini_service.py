@@ -1,13 +1,23 @@
-"""Gemini API service wrapper using the official google-genai SDK."""
+"""Gemini API service wrapper using the official google-genai SDK.
+
+Authentication Precedence (highest to lowest):
+  1. session_key — key entered by user in the sidebar (passed explicitly)
+  2. Streamlit secrets (GEMINI_API_KEY or GOOGLE_API_KEY)
+  3. Environment variables (GEMINI_API_KEY or GOOGLE_API_KEY)
+
+Only API keys that look like Gemini Developer API keys (starting with 'AIza')
+are accepted. OAuth tokens, service-account JSON, or other credentials will
+be rejected and the app will fall back to offline mode with a clear message.
+"""
 
 import os
 import json
 import re
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Literal
 from dotenv import load_dotenv
 
-# Load local .env if present
-load_dotenv()
+# Load local .env if present (does NOT override already-set env vars)
+load_dotenv(override=False)
 
 from google import genai
 from google.genai import types
@@ -22,38 +32,113 @@ from core.schemas import (
     ObservableDifference,
 )
 
+# ---------------------------------------------------------------------------
+# Type alias for key source diagnostic (never exposes the key value itself)
+# ---------------------------------------------------------------------------
+KeySource = Literal["sidebar", "streamlit_secrets", "environment", "none"]
 
-def get_configured_api_key(session_key: Optional[str] = None) -> Optional[str]:
-    """Retrieve Gemini API key from session state, st.secrets, or environment variables."""
-    if session_key and session_key.strip():
-        return session_key.strip()
-    
-    # Try streamlit secrets safely
+
+def _sanitize_key(raw: Optional[str]) -> Optional[str]:
+    """Strip whitespace and surrounding quotes; return None if the result is empty."""
+    if not raw:
+        return None
+    cleaned = raw.strip().strip("'\"")
+    return cleaned if cleaned else None
+
+
+def _looks_like_gemini_api_key(key: str) -> bool:
+    """
+    Heuristic: Gemini Developer API keys start with 'AIza' and are ~39 chars.
+    This rejects OAuth tokens (ya29.…), service-account JSON, etc.
+    """
+    return bool(key and key.startswith("AIza") and len(key) >= 35)
+
+
+def get_configured_api_key(
+    session_key: Optional[str] = None,
+) -> Tuple[Optional[str], KeySource]:
+    """
+    Resolve the best available Gemini API key and report its source.
+
+    Returns:
+        (key_or_None, source_label)
+        source_label is one of: 'sidebar', 'streamlit_secrets', 'environment', 'none'
+
+    The key is NEVER logged or exposed; only the source label is safe to show.
+    """
+
+    # Priority 1: Explicitly provided sidebar key
+    candidate = _sanitize_key(session_key)
+    if candidate:
+        if _looks_like_gemini_api_key(candidate):
+            return candidate, "sidebar"
+        else:
+            # Key is non-empty but doesn't look like a Gemini key — flag it
+            return None, "none"
+
+    # Priority 2: Streamlit secrets
     try:
         import streamlit as st
-        if "GEMINI_API_KEY" in st.secrets and st.secrets["GEMINI_API_KEY"]:
-            return st.secrets["GEMINI_API_KEY"].strip()
-        if "GOOGLE_API_KEY" in st.secrets and st.secrets["GOOGLE_API_KEY"]:
-            return st.secrets["GOOGLE_API_KEY"].strip()
+        for secret_name in ("GEMINI_API_KEY", "GOOGLE_API_KEY"):
+            secret_val = _sanitize_key(st.secrets.get(secret_name))
+            if secret_val and _looks_like_gemini_api_key(secret_val):
+                return secret_val, "streamlit_secrets"
     except Exception:
-        pass
+        pass  # Streamlit secrets not available outside a Streamlit context
 
-    env_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-    if env_key and env_key.strip():
-        return env_key.strip()
+    # Priority 3: Environment variables
+    for env_name in ("GEMINI_API_KEY", "GOOGLE_API_KEY"):
+        env_val = _sanitize_key(os.environ.get(env_name))
+        if env_val and _looks_like_gemini_api_key(env_val):
+            return env_val, "environment"
 
-    return None
+    return None, "none"
 
 
-def get_genai_client(api_key: Optional[str] = None) -> Optional[genai.Client]:
-    """Instantiate the official google-genai client."""
-    key = get_configured_api_key(api_key)
-    if not key:
-        return None
+def get_key_source(session_key: Optional[str] = None) -> KeySource:
+    """Return only the source label for diagnostics — never the key itself."""
+    _, source = get_configured_api_key(session_key)
+    return source
+
+
+def test_gemini_connection(api_key: str) -> Tuple[bool, Optional[str]]:
+    """
+    Send a minimal 'Reply with OK only.' request to verify the key and model work.
+
+    Returns:
+        (success: bool, error_message_or_None)
+    """
     try:
-        return genai.Client(api_key=key)
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",   # Use a stable well-known model for the test
+            contents="Reply with OK only.",
+            config=types.GenerateContentConfig(temperature=0.0, max_output_tokens=10),
+        )
+        text = (response.text or "").strip()
+        return True, None
     except Exception as e:
-        raise RuntimeError(f"Failed to initialize Gemini Client: {e}")
+        return False, str(e)
+
+
+def get_genai_client(api_key: str) -> genai.Client:
+    """
+    Instantiate a Gemini Developer API client using only the given API key.
+    Never falls back to OAuth / ADC / Vertex AI credentials.
+
+    Raises ValueError if the key is missing or invalid-looking.
+    Raises RuntimeError if the SDK client constructor fails.
+    """
+    if not api_key or not _looks_like_gemini_api_key(api_key):
+        raise ValueError(
+            "A valid Gemini Developer API key (starting with 'AIza') is required."
+        )
+    try:
+        # Explicitly pass api_key= with no vertexai/credentials to guarantee
+        # the Gemini Developer API path (x-goog-api-key header, not Bearer token).
+        return genai.Client(api_key=api_key)
+    except Exception as e:
+        raise RuntimeError(f"Failed to initialize Gemini Client: {e}") from e
 
 
 def _clean_json_text(text: str) -> str:
@@ -69,7 +154,7 @@ def _clean_json_text(text: str) -> str:
 class GeminiService:
     """Service to interact with Google Gemini API for prompt engineering tasks."""
 
-    DEFAULT_MODEL = "gemini-3.8-flash"
+    DEFAULT_MODEL = "gemini-2.0-flash"
 
     def __init__(
         self,
@@ -79,12 +164,31 @@ class GeminiService:
     ):
         self.model_name = model_name
         self.force_offline = force_offline
+        self.client: Optional[genai.Client] = None
+        self.key_source: KeySource = "none"
+        self._invalid_key_warning: Optional[str] = None
+
         if force_offline:
-            self.api_key = None
-            self.client = None
-        else:
-            self.api_key = get_configured_api_key(api_key)
-            self.client = get_genai_client(self.api_key) if self.api_key else None
+            return
+
+        resolved_key, source = get_configured_api_key(api_key)
+        self.key_source = source
+
+        if resolved_key:
+            try:
+                self.client = get_genai_client(resolved_key)
+            except Exception as e:
+                self._invalid_key_warning = str(e)
+                self.client = None
+        elif api_key and api_key.strip():
+            # Key was provided but didn't pass heuristic — warn user
+            raw = api_key.strip().strip("'\"")
+            if raw and not _looks_like_gemini_api_key(raw):
+                self._invalid_key_warning = (
+                    "The key you entered does not look like a Gemini Developer API key "
+                    "(expected format: AIza…). Please get a valid key from "
+                    "https://aistudio.google.com/app/apikey"
+                )
 
     def is_available(self) -> bool:
         """Check if an active API client is ready."""
@@ -132,20 +236,34 @@ class GeminiService:
             raw_text = _clean_json_text(response.text)
             return PromptAnalysisResult.model_validate_json(raw_text)
         except Exception as e:
-            if "getaddrinfo" in str(e).lower() or "connecterror" in str(e).lower():
+            err = str(e)
+            if "getaddrinfo" in err.lower() or "connecterror" in err.lower():
                 return self._heuristic_analyze_fallback(prompt_text)
-            if "RESOURCE_EXHAUSTED" in str(e) or "quota" in str(e).lower():
-                raise RuntimeError("Gemini API rate limit or quota exceeded. Please check your quota or try again in a moment.")
-            elif "API_KEY_INVALID" in str(e) or "invalid" in str(e).lower() and "key" in str(e).lower():
-                raise RuntimeError("Invalid Gemini API Key. Please verify the key entered.")
-            else:
-                # If structured parsing failed, attempt resilient json parse
-                try:
-                    raw_text = _clean_json_text(response.text)
-                    data = json.loads(raw_text)
-                    return PromptAnalysisResult.model_validate(data)
-                except Exception:
-                    raise RuntimeError(f"Error analyzing prompt with Gemini: {str(e)}")
+            if "RESOURCE_EXHAUSTED" in err or "quota" in err.lower():
+                raise RuntimeError(
+                    "Gemini API rate limit or quota exceeded. Please check your quota or try again."
+                )
+            if "API_KEY_INVALID" in err or ("invalid" in err.lower() and "key" in err.lower()):
+                raise RuntimeError(
+                    "Invalid Gemini API Key. Please verify the key in the sidebar."
+                )
+            if "ACCESS_TOKEN_TYPE_UNSUPPORTED" in err or "UNAUTHENTICATED" in err:
+                raise RuntimeError(
+                    "Authentication failed: the API received an OAuth token instead of an API key. "
+                    "Please ensure you are using a Gemini Developer API key (AIza…) from "
+                    "https://aistudio.google.com/app/apikey — not a service account or OAuth credential."
+                )
+            if "NOT_FOUND" in err or "not found" in err.lower():
+                raise RuntimeError(
+                    f"Model '{self.model_name}' not found. Try selecting a different model from the sidebar."
+                )
+            # Attempt resilient JSON parse before giving up
+            try:
+                raw_text = _clean_json_text(response.text)
+                data = json.loads(raw_text)
+                return PromptAnalysisResult.model_validate(data)
+            except Exception:
+                raise RuntimeError(f"Error analyzing prompt with Gemini: {err}")
 
     def optimize_prompt(self, prompt_text: str) -> PromptOptimizationResult:
         """Generate an optimized version of the prompt with full element diffs."""
@@ -185,19 +303,28 @@ class GeminiService:
             raw_text = _clean_json_text(response.text)
             return PromptOptimizationResult.model_validate_json(raw_text)
         except Exception as e:
-            if "getaddrinfo" in str(e).lower() or "connecterror" in str(e).lower():
+            err = str(e)
+            if "getaddrinfo" in err.lower() or "connecterror" in err.lower():
                 return self._heuristic_optimize_fallback(prompt_text)
-            if "RESOURCE_EXHAUSTED" in str(e) or "quota" in str(e).lower():
+            if "RESOURCE_EXHAUSTED" in err or "quota" in err.lower():
                 raise RuntimeError("Gemini API rate limit or quota reached. Please wait a moment.")
-            elif "API_KEY_INVALID" in str(e) or "invalid" in str(e).lower() and "key" in str(e).lower():
+            if "API_KEY_INVALID" in err or ("invalid" in err.lower() and "key" in err.lower()):
                 raise RuntimeError("Invalid Gemini API Key.")
-            else:
-                try:
-                    raw_text = _clean_json_text(response.text)
-                    data = json.loads(raw_text)
-                    return PromptOptimizationResult.model_validate(data)
-                except Exception:
-                    raise RuntimeError(f"Error optimizing prompt with Gemini: {str(e)}")
+            if "ACCESS_TOKEN_TYPE_UNSUPPORTED" in err or "UNAUTHENTICATED" in err:
+                raise RuntimeError(
+                    "Authentication failed: OAuth token received instead of API key. "
+                    "Use a Gemini Developer API key (AIza…) from https://aistudio.google.com/app/apikey"
+                )
+            if "NOT_FOUND" in err or "not found" in err.lower():
+                raise RuntimeError(
+                    f"Model '{self.model_name}' not found. Try selecting a different model."
+                )
+            try:
+                raw_text = _clean_json_text(response.text)
+                data = json.loads(raw_text)
+                return PromptOptimizationResult.model_validate(data)
+            except Exception:
+                raise RuntimeError(f"Error optimizing prompt with Gemini: {err}")
 
     def execute_raw_prompt(self, prompt_text: str, temperature: float = 0.7) -> str:
         """Execute any raw prompt against Gemini and return its raw text output."""
@@ -218,10 +345,19 @@ class GeminiService:
             )
             return response.text or "(Empty response received from model)"
         except Exception as e:
-            if "getaddrinfo" in str(e).lower() or "connect" in str(e).lower():
-                # If network fails in restricted environment, offer fallback
+            err = str(e)
+            if "getaddrinfo" in err.lower() or "connect" in err.lower():
                 return self._heuristic_execute_fallback(prompt_text)
-            raise RuntimeError(f"Model generation failed: {str(e)}")
+            if "ACCESS_TOKEN_TYPE_UNSUPPORTED" in err or "UNAUTHENTICATED" in err:
+                raise RuntimeError(
+                    "Authentication failed: OAuth token received instead of API key. "
+                    "Use a Gemini Developer API key (AIza…) from https://aistudio.google.com/app/apikey"
+                )
+            if "NOT_FOUND" in err or "not found" in err.lower():
+                raise RuntimeError(
+                    f"Model '{self.model_name}' not found. Try selecting a different model."
+                )
+            raise RuntimeError(f"Model generation failed: {err}")
 
     def compare_outputs(
         self,
@@ -272,7 +408,6 @@ class GeminiService:
                 data = json.loads(raw_text)
                 return ComparisonAnalysisResult.model_validate(data)
             except Exception:
-                # Return graceful parsed fallback
                 return ComparisonAnalysisResult(
                     observable_differences=[
                         ObservableDifference(
@@ -304,7 +439,7 @@ class GeminiService:
         has_format = bool(re.search(r"\b(json|markdown|table|bullet|list|steps|format|schema|code)\b", prompt, re.I))
         has_constraints = bool(re.search(r"\b(do not|must|only|limit|avoid|never|maximum|minimum|constraints)\b", prompt, re.I))
         has_context = bool(re.search(r"\b(because|for|working on|project|environment|audience|scenario|context)\b", prompt, re.I))
-        
+
         clarity_score = min(92, 55 + min(30, word_count * 2))
         context_score = 85 if has_context else 40
         specificity_score = 88 if word_count > 25 and (has_format or has_constraints) else 45
