@@ -33,10 +33,12 @@ def get_configured_api_key(session_key: Optional[str] = None) -> Optional[str]:
         import streamlit as st
         if "GEMINI_API_KEY" in st.secrets and st.secrets["GEMINI_API_KEY"]:
             return st.secrets["GEMINI_API_KEY"].strip()
+        if "GOOGLE_API_KEY" in st.secrets and st.secrets["GOOGLE_API_KEY"]:
+            return st.secrets["GOOGLE_API_KEY"].strip()
     except Exception:
         pass
 
-    env_key = os.environ.get("GEMINI_API_KEY")
+    env_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
     if env_key and env_key.strip():
         return env_key.strip()
 
@@ -67,7 +69,7 @@ def _clean_json_text(text: str) -> str:
 class GeminiService:
     """Service to interact with Google Gemini API for prompt engineering tasks."""
 
-    DEFAULT_MODEL = "gemini-2.5-flash"
+    DEFAULT_MODEL = "gemini-3.8-flash"
 
     def __init__(
         self,

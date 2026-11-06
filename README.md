@@ -71,7 +71,7 @@ PromptIQ is a production-grade, interactive prompt engineering learning and prod
 - **LLM Engine**: Google Gemini API powered by the official [`google-genai`](https://github.com/googleapis/python-genai) SDK
 - **Data Validation & Typing**: [Pydantic](https://docs.pydantic.dev/) v2
 - **Environment Management**: `python-dotenv`
-- **Recommended Model**: `gemini-2.5-flash` (also supports `gemini-2.0-flash`, `gemini-1.5-flash`, `gemini-1.5-pro`)
+- **Recommended Model**: `gemini-3.8-flash` (also supports `gemini-2.0-flash`, `gemini-1.5-flash`, `gemini-1.5-pro`)
 
 ---
 

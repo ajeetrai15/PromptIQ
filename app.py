@@ -89,7 +89,7 @@ def main():
         # Model Selector
         st.markdown("##### 🤖 Model Selection")
         model_options = [
-            "gemini-2.5-flash",
+            "gemini-3.8-flash",
             "gemini-2.0-flash",
             "gemini-1.5-flash",
             "gemini-1.5-pro",
@@ -98,7 +98,7 @@ def main():
             "Select Gemini Model:",
             model_options,
             index=model_options.index(st.session_state.selected_model) if st.session_state.selected_model in model_options else 0,
-            help="gemini-2.5-flash is Google's recommended high-speed, structured intelligence model.",
+            help="gemini-3.8-flash is Google's recommended high-speed, structured intelligence model.",
             label_visibility="collapsed",
         )
         st.session_state.selected_model = selected_model
